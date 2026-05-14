@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.cache/
+*.pt
+*.bin
+
+# OS
+.DS_Store
+
+# LaTeX byproducts (but keep source.pdf — that's the paper, not a build artifact)
+*.aux
+*.log
+*.bbl
+*.blg
+*.out
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+04-literature-review.pdf
+
+# Helper script — not part of the study artifacts
+sandbox/publish.sh

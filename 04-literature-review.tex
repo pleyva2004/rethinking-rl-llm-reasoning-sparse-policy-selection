@@ -1,0 +1,91 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{mathtools}
+\usepackage{natbib}
+\usepackage{hyperref}
+\usepackage{xcolor}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=blue!50!black,
+  urlcolor=blue!50!black
+}
+
+\title{Sparse Policy Selection as a Mechanistic Account of Reinforcement Learning for Reasoning: A Review of \citet{akgul2026}}
+\author{Literature review entry}
+\date{Studied: 2026-05-13 \\ \texttt{arXiv:2605.06241}}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\citet{akgul2026} present a token-level mechanistic analysis of reinforcement learning with verifiable rewards (RLVR) for large language model reasoning, and argue that the standard RL post-training pipeline can be replaced by an offline, entropy-gated contrastive fine-tune at roughly three orders of magnitude lower compute. Across four base/RL pairs spanning Qwen2.5-1.5B/7B and Qwen3-4B with both GRPO \citep{shao2024grpo} and PPO, they show that the RL-trained policy differs from the base policy at only $1$--$4\%$ of token positions, that the RL-preferred token at each such position lies within the base model's top-$5$ candidates with mean rank $\approx 2.2$, and that these positions concentrate at high base-model predictive entropy. Causal recovery of the RL model's pass@1 by oracle correction at exactly these positions, with random controls failing, supports the interpretation that RL implements a sparse policy-selection operator rather than a capability-acquisition mechanism. Their proposed method, \emph{ReasonMaxxer}, applies an advantage-weighted contrastive loss only at entropy-gated decision points and matches or exceeds full RL on six mathematical reasoning benchmarks. The work thus provides both a mechanistic refinement of recent observations that RL traces lie within the base sampling distribution \citep{yue2025passatk} and a constructive offline alternative to RLVR pipelines.
+\end{abstract}
+
+\section{Background and Motivation}
+
+A growing body of work has questioned whether RLVR genuinely expands the reasoning capacity of large language models or merely refines an existing distribution over reasoning trajectories. \citet{yue2025passatk} establish via pass@$k$ analysis that RL-trained models' reasoning paths remain inside the support of base-model sampling. \citet{davis2025objective} prove that popular RL algorithms with binary rewards reduce to stochastic gradient ascent on monotone transforms of the probability of a correct answer, implying that RL is profitable only where the base model already succeeds non-trivially. \citet{wang2025oneexample} show that a single training example can yield large RL improvements, suggesting the corrective signal is highly compressible. These results jointly constrain what RL could plausibly be doing, but stop short of localising the effect at the token level or asking whether the RL optimisation loop itself is necessary.
+
+The paper under review closes that gap by characterising RL's behavioural footprint with token-level resolution and translating the characterisation into an RL-free training procedure.
+
+\section{Technical Approach}
+\label{sec:method}
+
+Let $\pi_{\theta}(\cdot \mid q, o_{<t})$ denote an autoregressive language model conditioned on prompt $q$ and partial output $o_{<t}$, with vocabulary $\mathcal{V}$. Let $\pi_{\text{base}}$ denote a pre-trained base model and $\pi_{\text{RL}}$ the same base after RL post-training with binary verifiable reward $r(o, q) \in \{0, 1\}$.
+
+\paragraph{Decision points via predictive entropy.}
+The central diagnostic is the per-position predictive entropy under the base model,
+\begin{equation}
+H_t \;=\; -\sum_{v \in \mathcal{V}} \pi_{\text{base}}(v \mid q, o_{<t}) \, \log \pi_{\text{base}}(v \mid q, o_{<t}),
+\label{eq:entropy}
+\end{equation}
+where the logarithm is taken in nats. A position $t$ is termed a \emph{decision point} at threshold $\tau$ iff $H_t > \tau$. The empirically optimal range reported is $\tau \in [1.2, 1.8]$, gating between $2\%$ and $8\%$ of positions across the studied model scales.
+
+\paragraph{Disagreement is sparse, conservative, and concentrated.}
+For each base/RL pair the authors classify each position as \emph{reranked} (the RL top-$1$ differs from the base top-$1$ but lies within the base top-$5$) or \emph{shifted} (the RL top-$1$ lies outside the base top-$5$). They report reranked fractions of $1.03$--$3.96\%$ and shifted fractions of $0.01$--$0.12\%$ across pairs, with the RL-preferred token at reranked positions sitting at mean rank $2.14$--$2.39$ under the base model, and reranked positions exhibiting $5$--$12\times$ higher base entropy than unchanged positions. Thus $\pi_{\text{RL}}$'s greedy trajectory deviates from $\pi_{\text{base}}$'s only on a sparse, high-entropy subset, and even there only by promoting a token already considered probable by the base.
+
+\paragraph{Causal oracle intervention.}
+To establish that the disagreements are responsible for RL's accuracy gain, the authors construct an oracle-corrected trajectory by greedy-decoding from $\pi_{\text{base}}$ and overwriting the base top-$1$ with the RL top-$1$ at every reranked position. A random control overwrites the same number of positions with random base top-$5$ tokens. The oracle reproduces the RL model's pass@1 exactly across all four pairs while the random control performs no better than the base, ruling out diffuse-perturbation explanations.
+
+\paragraph{Entropy as a teacher-free locator.}
+Replacing the rule ``intervene at the reranked positions'' with ``intervene at $\{t : H_t > \tau\}$'' removes any dependence on the RL teacher for locating decision points. With $\tau = 1.2$, the entropy-gated correction matches the oracle on the Qwen2.5-7B GRPO pair and approaches it on the PPO pair while touching only $1.2$--$8.3\%$ of positions, licensing an offline, RL-free training procedure.
+
+\paragraph{ReasonMaxxer: entropy-gated contrastive fine-tuning.}
+For each problem $q$ the method samples $N$ rollouts from $\pi_{\text{base}}$, labels each by correctness $r_i \in \{0,1\}$, and computes the per-rollout normalised advantage
+\begin{equation}
+A_i \;=\; \frac{r_i - \bar{r}}{\sigma_r + \epsilon},
+\label{eq:advantage}
+\end{equation}
+where $\bar{r}$ and $\sigma_r$ are the per-problem mean and standard deviation, and $\epsilon$ is a numerical floor. The training loss combines an advantage-weighted cross-entropy supported only on the per-rollout decision-point set $D^{(i)} = \{t : H_t^{(i)} > \tau\}$ with a base-anchoring KL on the complement,
+\begin{equation}
+\mathcal{L}(\theta) \;=\; -\sum_{i} A_i \!\!\sum_{t \in D^{(i)}} \!\! \log \pi_{\theta}\!\big(o_t^{(i)} \,\big|\, q, o_{<t}^{(i)}\big) \;+\; \lambda \sum_{i} \!\!\sum_{t \notin D^{(i)}} \!\! \mathrm{KL}\!\Big(\pi_{\text{base}}(\cdot \mid q, o_{<t}^{(i)}) \,\Big\|\, \pi_{\theta}(\cdot \mid q, o_{<t}^{(i)})\Big).
+\label{eq:loss}
+\end{equation}
+The first term reweights probability mass among existing high-probability candidates at uncertain positions; the second prevents drift outside the decision-point set. The advantage normalisation in Eq.~\eqref{eq:advantage} is inherited from GRPO \citep{shao2024grpo}, but the rest of the GRPO pipeline---online rollouts, ratio clipping, KL-to-reference penalty inside the optimisation loop---is discarded.
+
+\paragraph{Low-dimensional parametric correction.}
+A complementary experimental thread shows that the entire base-to-RL behavioural delta is captured by a rank-$32$ LoRA on attention QKVO projections trained via KL distillation from $\pi_{\text{RL}}$, modifying only $0.27$--$0.49\%$ of model parameters. Rank-$8$ on the output projection $W_O$ alone approaches the rank-$32$ QKVO result. RL's correction is therefore not only behaviourally sparse but parametrically low-rank and concentrated in the output head.
+
+\section{Key Results}
+
+ReasonMaxxer is evaluated against publicly available RL-trained checkpoints across three model families (Qwen2.5, Qwen3, Mistral), six scales, and six mathematical reasoning benchmarks (including MATH-500 and GSM8K). It matches or exceeds the RL-trained baseline accuracy in each setting while requiring only tens of problems and minutes of single-GPU training, a reduction in training cost of approximately three orders of magnitude relative to the corresponding GRPO and PPO runs reported by \citet{zeng2025simplerl} and the Open-Reasoner-Zero pipeline. Sensitivity analysis on $\tau$ in the range $[1.0, 2.2]$ shows broad performance plateaus, with two distinct optima: one corresponding to a $5.2\%$ decision-point fraction and another at $2.6\%$ that closely matches the $2.11\%$ intervention rate observed in the underlying RL teacher. The contrastive signal is therefore robust to threshold choice as long as a plausible high-entropy set is selected.
+
+\section{Position in the Literature}
+
+The work refines and unifies several recent threads on the mechanism of RL for reasoning. Relative to \citet{yue2025passatk}, who establish that RL traces lie within the base sampling distribution, \citet{akgul2026} locate the effect at the token level and provide a causal probe. Relative to \citet{davis2025objective}, who prove RLVR is equivalent to SGA on a monotone transform of the success probability, this paper turns the implication---that RL acts only at the model's competence frontier---into an explicit, entropy-localised intervention site. Relative to RL-free reasoning baselines such as STaR \citep{zelikman2022star} and rejection-sampling fine-tuning, the contrastive loss in Eq.~\eqref{eq:loss} differs by applying non-uniform per-position weighting tied to base-model uncertainty, rather than uniform token-level loss on full correct sequences. Relative to DPO \citep{rafailov2023dpo}, the method shifts the unit of preference from the full sequence to the decision-point token, producing what is effectively a positionally sparsified form of preference optimisation. Process-reward methods such as PRIME \citep{cui2025prime} provide dense token-level signal but retain the online RL loop; ReasonMaxxer obtains comparable density of supervision while remaining purely offline.
+
+\section{Limitations and Open Questions}
+
+Several constraints limit the scope of the conclusions. First, the within-top-$5$ promotion claim is measured on an already RL-trained checkpoint; the base distribution against which top-$5$ is computed has not been altered by RL, but the framing depends on the assumption that this constraint generalises beyond mathematical reasoning. Second, all empirical results are obtained on tasks with a clean binary verifiable reward, which is required for the advantage normalisation in Eq.~\eqref{eq:advantage}. Open-ended generation, agentic tool use, and tasks where the correct intervention point is at low rather than high entropy fall outside the framework's licensed scope, and the framework itself predicts that they should defeat the entropy-gated locator. Third, the threshold $\tau$ is tuned per setup; while the sensitivity ablation shows broad plateaus, the absence of a principled procedure for setting $\tau$ on a new model leaves a tuning step that partially offsets the elimination of the RL loop. Fourth, no theoretical account is offered for the empirical regularity that the RL-promoted token sits at base-rank approximately $2.2$ across all studied pairs, suggesting an open question about whether bounded learning rates in GRPO and PPO induce a Lipschitz constraint on rank displacement.
+
+\section*{Sandbox Probe}
+
+A minimal CPU-runnable PyTorch experiment was built to probe the entropy-locator claim on a small open base model (Qwen2.5-0.5B-Instruct), generating a chain-of-thought for a math word problem under greedy decoding, computing per-token predictive entropy from the model's own logits via Eq.~\eqref{eq:entropy}, and reporting the decision-point set at $\tau = 1.4$. Source: \url{https://github.com/pleyva2004/ai-study-rethinking-rl-llm-reasoning}.
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\end{document}
