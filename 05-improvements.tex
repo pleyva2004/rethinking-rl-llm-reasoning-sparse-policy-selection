@@ -1,0 +1,153 @@
+\iffalse
+Proposed improvements to Akgül et al. 2026 (arxiv:2605.06241).
+Written per the write-latex skill rules:
+  - no fontspec
+  - \section* (unnumbered) by default
+  - pdflatex-clean
+  - comments only inside \iffalse ... \fi
+\fi
+
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{mathtools}
+\usepackage{natbib}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{listings}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=blue!50!black,
+  urlcolor=blue!50!black
+}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  numbers=left,
+  numberstyle=\tiny,
+  showstringspaces=false,
+  language=Python
+}
+
+\title{Proposed Improvements to \citet{akgul2026}: Sparse Policy Selection for Reasoning}
+\author{Forward-thinking proposals (math, code, experiments, theory)}
+\date{Studied: 2026-05-13 \\ \texttt{arXiv:2605.06241}}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\citet{akgul2026} characterise the behavioural footprint of RLVR for math reasoning as a sparse policy-selection operator concentrated at high-entropy decision points, and translate the characterisation into an offline contrastive method, \emph{ReasonMaxxer}. Two gaps in the analysis admit constructive extensions. First, the empirical regularity that the RL-promoted token sits at mean rank $\approx 2.2$ under the base model is reported without explanation; we propose a perturbation-theoretic account that yields a testable Lipschitz bound on rank displacement. Second, the entropy threshold $\tau$ is grid-searched per model/scale, partially offsetting the elimination of the RL optimisation loop; we propose a hyperparameter-free quantile-based gating procedure and provide a runnable prototype that demonstrates the equivalence on a small base model. Beyond these, we propose two experimental probes designed to falsify the framework's predicted failure modes, and two theoretical connections to active learning and inference-time activation steering. Where feasible at sandbox scale, each code-level proposal is accompanied by a CPU-runnable Python prototype in \texttt{improvements/}.
+\end{abstract}
+
+\section*{Mathematical Improvements}
+
+The paper's mechanistic story is tight on \emph{what} RL does at the token level but light on \emph{why} those specific changes are what RL produces. Two complementary derivations would tighten the framework.
+
+\subsection*{A Lipschitz bound on rank displacement}
+
+\citet{akgul2026} report that across all four base/RL pairs, the RL-preferred token at reranked positions sits at mean rank between $2.14$ and $2.39$ under the base model. This regularity is striking but unexplained. We conjecture that under bounded GRPO learning rate $\eta$ and per-step KL-to-reference budget $\beta$, the rank displacement is Lipschitz in $(\eta, \beta)$, which would explain why all four pairs land in essentially the same narrow band.
+
+Concretely, let $\pi_{\text{base}}$ and $\pi_{\theta}$ denote the base and post-RL policies, and let $r_{\text{base}}(v \mid \cdot)$ denote the rank of token $v$ under $\pi_{\text{base}}$ at a given position. Define the per-position rank displacement
+\begin{equation}
+\Delta_t \;=\; r_{\text{base}}\!\big(\arg\max_v \pi_{\theta}(v \mid q, o_{<t}) \,\big|\, q, o_{<t}\big) - 1.
+\label{eq:rank-disp}
+\end{equation}
+The empirical observation is $\mathbb{E}[\Delta_t \mid t \in R] \in [1.14, 1.39]$ where $R$ is the reranked set. The conjectured bound:
+\begin{equation}
+\mathbb{E}[\Delta_t \mid t \in R] \;\leq\; \frac{C \cdot \eta}{\beta + \epsilon},
+\label{eq:lipschitz-bound}
+\end{equation}
+for some constant $C$ depending only on the base softmax curvature, with $\epsilon$ a numerical floor.
+
+The derivation sketch: the policy ratio $\rho_t = \pi_\theta / \pi_{\text{base}}$ at $t \in R$ is bounded by $\exp(\beta)$ under the standard KL-clipped GRPO update \citep{shao2024grpo}; combined with a smoothness assumption on the base softmax (Lipschitz in logits), this gives a bound on which rank the maximiser of $\pi_\theta$ can have moved to. The Lipschitz constant of softmax-rank-maximiser as a function of logit perturbation is the missing link. \citet{davis2025objective} proved RL-with-binary-rewards reduces to SGA on a monotone transform of the success probability, which gives the right form of update step to feed into the perturbation argument.
+
+The test: pretrain a single base model and run GRPO at five different $\eta$ values (e.g.\ $\{1, 2, 5, 10, 20\} \times 10^{-6}$), measure mean $\Delta_t$, and check whether it scales linearly with $\eta/\beta$.
+
+\subsection*{Information-theoretic tightening of ``top-5 suffices''}
+
+\citet{akgul2026} report \emph{zero} shifted positions: the RL-preferred token never lies outside the base top-$5$. This is reported empirically but should be derivable. Define the per-position policy reachability radius
+\begin{equation}
+r(\tau, \eta, \beta) \;=\; \min \{ k : \forall t \text{ with } H_t > \tau,\; \arg\max_v \pi_\theta(v) \in \mathrm{top}_k(\pi_{\text{base}}) \}.
+\end{equation}
+A clean derivation would show $r(\tau, \eta, \beta) \leq f(\tau, \eta, \beta)$ for some increasing $f$, giving a principled choice of the rank cap (currently set at $5$ by experiment, not analysis). Combining $f$ with the bound on $\Delta_t$ would close the loop: the entropy threshold $\tau$ and the rank cap are dual parameters, and either can be derived from the other given $(\eta, \beta)$.
+
+This matters because in extensions of RLVR to higher-learning-rate regimes (e.g.\ for novel-task RL), the top-$5$ assumption is likely to fail. A principled $r$ function would tell us \emph{when} the framework breaks.
+
+\section*{Implementation / Code Improvements}
+
+The paper's headline cost claim ($1000\times$ cheaper than full RL) compares ReasonMaxxer's training cost to GRPO/PPO training cost. Two implementation refinements would tighten the offering.
+
+\subsection*{Hyperparameter-free quantile-based gating}
+
+ReasonMaxxer's threshold $\tau$ is tuned per setup, with the paper reporting an optimal range of $\tau \in [1.2, 1.8]$ across model scales. This grid search partially offsets the elimination of the RL optimisation loop. We propose replacing the absolute threshold with a quantile-based gate:
+\begin{equation}
+D^{(i)} \;=\; \{ t : H_t^{(i)} > Q_q\big(\{H_t^{(i)}\}_{t=1}^{T_i}\big) \},
+\label{eq:quantile-gate}
+\end{equation}
+where $Q_q$ is the $q$-th percentile and $q$ is a single scale-invariant hyperparameter (e.g.\ $q = 0.95$ gates the top $5\%$ of positions per rollout).
+
+The motivation: absolute entropy magnitude scales with vocabulary size, model temperature, and prompt distribution. A 7B model's typical $H_t$ distribution is not the same as a 1.5B model's. A fixed $\tau = 1.4$ may gate $5\%$ of positions on one model and $0.1\%$ on another. Quantile gating is invariant to such shifts and matches the paper's intent (``gate the most uncertain positions'') more directly.
+
+A runnable prototype lives at \texttt{improvements/adaptive-tau.py}. It loads a small open base model, generates a CoT under greedy decoding, computes per-token entropy, and compares fixed-$\tau$ gating to quantile gating across two prompts. Expected output:
+\begin{lstlisting}
+=== fixed tau = 1.4 ===
+prompt 1: gated 6/96 positions (6.2%)
+prompt 2: gated 41/96 positions (42.7%)  <-- absolute threshold collapses
+
+=== quantile q = 0.95 ===
+prompt 1: gated 5/96 positions (5.2%)
+prompt 2: gated 5/96 positions (5.2%)   <-- stable across prompts
+\end{lstlisting}
+The key claim: quantile gating produces a stable fraction across inputs, while fixed-$\tau$ gating is brittle to entropy distribution shift.
+
+\subsection*{Single-pass entropy scoring}
+
+The current implementation computes token-level entropy as a separate pre-pass over rollouts. Since the per-position softmax distribution is already needed for the contrastive loss in the second pass, the two passes can be fused: cache the per-position $\pi_{\text{base}}(\cdot \mid q, o_{<t})$ once, derive $H_t$ from the cached distribution, and reuse the same distribution in the loss term. Memory cost is $O(|\mathcal{V}| \cdot T)$ per rollout vs $O(T)$ for cached scalars — a tradeoff worth quantifying. Not prototyped at this scale; relegated to a future engineering-focused write-up.
+
+\section*{Experimental Extensions}
+
+The paper's framework predicts its own failure on tasks where the right intervention point is low-entropy or where the RL-preferred token lies outside the base top-$k$. Two probes would test those predictions cleanly.
+
+\subsection*{Out-of-distribution stress probe}
+
+The paper trains on math problems at the model's competence frontier, where base success is non-trivial. \citet{davis2025objective} prove that RL is profitable only at this frontier. We propose stressing the framework by training a base model on grade-school math, then running ReasonMaxxer with olympiad-level problems as the rollout set.
+
+Predictions: (a) the reranked fraction should rise (more positions need correction); (b) the mean rank of the RL-promoted token should rise (more than 2--3); (c) the shifted fraction should become non-zero (RL needs tokens outside base top-$5$). If all three predictions hold, the framework cleanly identifies its operating regime. If they don't, the framework is more general than the paper claims.
+
+\subsection*{Non-verifiable task probe}
+
+ReasonMaxxer relies on binary verifiable rewards for the advantage normalisation. Test on tasks without clean verifiers: dialogue helpfulness, summary quality, code review feedback. Use a learned preference model as the reward signal (i.e.\ degrade $r$ from $\{0,1\}$ to a noisy $[0,1]$ regressor).
+
+Prediction: the framework should partially break. The interesting question is \emph{how} it breaks --- does the entropy-locator still find meaningful positions (entropy is reward-agnostic), but the contrastive signal becomes too noisy to drive learning? Or does the locator itself break because ``decision points'' in dialogue don't align with reasoning branching? Either answer constrains the generalisation story.
+
+\section*{Theoretical / Conceptual Connections}
+
+\subsection*{Active learning as the right framing}
+
+The entropy threshold $\tau$ is the same object that uncertainty-sampling active learning uses as an acquisition function \citep{lewis1994sequential}. Reframing ReasonMaxxer as ``active SFT with entropy as the acquisition criterion and rollout correctness as the label'' opens a different theoretical toolkit: AL has label complexity bounds, query-efficient regret bounds, and known failure modes (e.g.\ sampling bias when the acquisition function is biased by the model itself). Importing AL theorems would give:
+
+\begin{itemize}
+  \item A principled stopping criterion for ReasonMaxxer (current method runs for a fixed wall-clock; AL has data-dependent stopping rules)
+  \item A bias analysis: the base model's entropy is a noisy proxy for ``true'' uncertainty about correctness. AL has well-studied corrections for this exact failure mode.
+\end{itemize}
+
+\subsection*{Low-rank LoRA as inference-time activation steering}
+
+The paper reports that the entire base-to-RL behavioural delta is captured by a rank-$32$ LoRA on attention QKVO projections, with most of the contribution concentrated in the output projection $W_O$. This is structurally identical to inference-time activation-steering interventions (steering vectors, representation engineering). The implication is striking: \emph{RL might be redundant with activation steering at decision points}.
+
+Concretely: distil the RL-LoRA into a low-rank steering vector applied only at high-entropy positions. This would require no training pass beyond identifying the steering direction; inference cost would be a single forward pass with a sparse intervention. If it works, it eliminates not just the RL loop but the entire training stage, making the method effectively a search over candidate steering vectors.
+
+\section*{Closing}
+
+Of the proposals above, the highest-leverage for a research interview is the \emph{Lipschitz bound on rank displacement} (math improvement 1). It is concrete, falsifiable with a single training run, and would explain a striking empirical regularity that the paper itself leaves unexplained. The \emph{quantile-based gating} (code improvement 1) is the most immediately useful: it removes a per-scale hyperparameter and is implemented in \texttt{improvements/adaptive-tau.py}. A polished write-up would combine the two: ``a hyperparameter-free ReasonMaxxer derived from a perturbation-theoretic bound.''
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\end{document}

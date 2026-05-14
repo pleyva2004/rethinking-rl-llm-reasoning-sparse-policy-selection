@@ -26,6 +26,14 @@ jobs:
           latexmk_use_xelatex: false
           args: -pdf -interaction=nonstopmode -halt-on-error -file-line-error
 
+      - name: Compile improvements
+        if: hashFiles('05-improvements.tex') != ''
+        uses: xu-cheng/latex-action@v3
+        with:
+          root_file: 05-improvements.tex
+          latexmk_use_xelatex: false
+          args: -pdf -interaction=nonstopmode -halt-on-error -file-line-error
+
       - name: Compile interview handout
         if: hashFiles('interview-handout.tex') != ''
         uses: xu-cheng/latex-action@v3
@@ -37,7 +45,7 @@ jobs:
       - name: Stage generated PDFs in pdfs/
         run: |
           mkdir -p pdfs
-          for f in 04-literature-review.pdf interview-handout.pdf; do
+          for f in 04-literature-review.pdf 05-improvements.pdf interview-handout.pdf; do
             if [ -f "$f" ]; then
               mv "$f" "pdfs/$f"
               echo "Moved $f → pdfs/"
