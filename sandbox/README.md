@@ -1,4 +1,4 @@
-# ai-study-rethinking-rl-llm-reasoning
+# Sandbox: rethinking-rl-llm-reasoning-sparse-policy-selection
 
 > Sandbox study of **Rethinking RL for LLM Reasoning: It's Sparse Policy Selection, Not Capability Learning** (Akgül et al., 2026, [arxiv:2605.06241](https://arxiv.org/abs/2605.06241)).
 

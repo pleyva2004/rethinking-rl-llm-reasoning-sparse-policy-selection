@@ -6,9 +6,7 @@
   "source_url": "https://arxiv.org/abs/2605.06241",
   "pdf_path": "~/ai-research-studies/rethinking-rl-llm-reasoning-sparse-policy-selection/source.pdf",
   "started": "2026-05-13",
-  "stages_completed": ["00-ingest", "01-interview-prep", "02-math-deep-dive", "03-opinion-template-only", "04-sandbox-scaffold-only", "05-case-study"],
-  "github_url": null,
-  "github_publish_command": "cd ~/ai-research-studies/rethinking-rl-llm-reasoning-sparse-policy-selection/sandbox && git init -b main && git add . && git commit -m 'Initial scaffold for ai-study-rethinking-rl-llm-reasoning' && gh repo create ai-study-rethinking-rl-llm-reasoning --public --source=. --push --description 'Sandbox study of: Rethinking RL for LLM Reasoning (arxiv 2605.06241)'",
-  "official_repo": "https://github.com/farukakgul/ReasonMaxxer",
-  "dry_run": true
+  "stages_completed": ["00-ingest", "01-interview-prep", "02-math-deep-dive", "03-opinion-template", "04-sandbox-scaffold", "05-literature-review", "06-publish"],
+  "github_url": "https://github.com/pleyva2004/rethinking-rl-llm-reasoning-sparse-policy-selection",
+  "official_repo": "https://github.com/farukakgul/ReasonMaxxer"
 }
