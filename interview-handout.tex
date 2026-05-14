@@ -1,0 +1,79 @@
+\iffalse
+One-page printable interview handout for Akgül et al. 2026
+arxiv:2605.06241 — "Rethinking RL for LLM Reasoning"
+Written per the write-latex skill's rules:
+  - no fontspec
+  - \section* (unnumbered) by default
+  - pdflatex-clean
+  - comments only inside \iffalse ... \fi
+\fi
+
+\documentclass[10pt]{article}
+
+\usepackage[letterpaper, margin=0.6in]{geometry}
+\usepackage{amsmath, amssymb}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=blue!50!black,
+  urlcolor=blue!50!black
+}
+
+\titleformat{\section}{\large\bfseries}{}{0pt}{}
+\titlespacing*{\section}{0pt}{6pt}{2pt}
+
+\setlist[itemize]{leftmargin=*, topsep=1pt, itemsep=1pt}
+
+\pagenumbering{gobble}
+
+\begin{document}
+
+\begin{center}
+  {\Large\textbf{Akg\"ul et al.\ 2026 --- Rethinking RL for LLM Reasoning}}\\[2pt]
+  {\small Sparse Policy Selection, Not Capability Learning \quad\textbar\quad arXiv:2605.06241 \quad\textbar\quad \href{https://github.com/pleyva2004/rethinking-rl-llm-reasoning-sparse-policy-selection}{my study repo}}
+\end{center}
+
+\section*{One-Liner}
+RL post-training for math reasoning reranks $\sim$2\% of tokens at high-entropy decision points toward alternatives the base model already had in its top-5; an offline contrastive fine-tune gated on base entropy matches full RL at $\sim 1000\times$ less compute.
+
+\section*{What's Novel}
+\begin{itemize}
+  \item Token-level mechanistic claim with a causal probe: oracle correction at reranked positions recovers RL's pass@1 exactly; random controls do not.
+  \item Teacher-free locator: base entropy alone ($\tau \approx 1.4$ nats) identifies the intervention sites without ever consulting the RL model.
+  \item Constructive alternative: \emph{ReasonMaxxer} drops the online RL loop, keeps GRPO's per-group advantage normalisation, applies CE only at decision points, KL-anchors elsewhere.
+  \item RL's parametric delta is rank-32 LoRA on QKVO (0.27--0.49\% of params); rank-8 on $W_O$ alone nearly suffices.
+\end{itemize}
+
+\section*{Math in 60 Seconds}
+Token-level predictive entropy under the base model
+\[
+  H_t = -\sum_{v} \pi_{\text{base}}(v \mid q, o_{<t}) \log \pi_{\text{base}}(v \mid q, o_{<t}).
+\]
+Decision-point set: $D = \{t : H_t > \tau\}$. Per-rollout advantage (from GRPO):
+\[
+  A_i = \frac{r_i - \bar r}{\sigma_r + \epsilon}, \quad r_i \in \{0,1\}.
+\]
+ReasonMaxxer loss:
+\[
+  \mathcal{L} = -\sum_i A_i \!\!\sum_{t \in D^{(i)}}\!\! \log \pi_\theta\big(o_t^{(i)} \,\big|\, q, o_{<t}^{(i)}\big) \;+\; \lambda \!\!\sum_{t \notin D^{(i)}}\!\! \mathrm{KL}\big( \pi_{\text{base}} \,\big\|\, \pi_\theta \big).
+\]
+Empirical: reranked fraction 1--4\%; the RL-promoted token sits at mean rank $\approx 2.2$ under the base; entropy at reranked positions is $5$--$12\times$ that at unchanged ones.
+
+\section*{What I'd Push Back On}
+\begin{itemize}
+  \item ``Within base top-5'' is measured on already RL-trained checkpoints; partial circularity until verified on a held-out, truly untouched base.
+  \item Threshold $\tau$ is tuned per setup. ``No RL needed'' partially trades the optimisation loop for a scalar grid-search.
+  \item All wins are on math with verifiable scalar rewards. Open-ended tasks, agentic tool use, or tasks where the right intervention is \emph{low}-entropy fall outside the licensed scope --- and the framework predicts its own failure there.
+  \item ``1000$\times$ cheaper'' compares to full RL training only; ReasonMaxxer still needs labeled-correctness rollouts. Accounting could be sharper.
+\end{itemize}
+
+\section*{My One Question}
+\emph{Is the mean-rank-$\approx 2$ regularity an artifact of bounded RL learning rates inducing a Lipschitz constraint on rank displacement, or is there something deeper about why RL's correction never reaches past the second-most-likely base candidate?}
+
+\end{document}
