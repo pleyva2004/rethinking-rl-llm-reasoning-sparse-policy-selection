@@ -20,7 +20,9 @@ venv/
 *.fls
 *.fdb_latexmk
 *.synctex.gz
-04-literature-review.pdf
+# Generated PDFs at repo root are byproducts — committed to pdfs/ by CI instead
+/04-literature-review.pdf
+/interview-handout.pdf
 
 # Helper script — not part of the study artifacts
 sandbox/publish.sh
