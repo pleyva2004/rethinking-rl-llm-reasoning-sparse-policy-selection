@@ -30,3 +30,10 @@ RL post-training for reasoning doesn't teach the model anything new — it nudge
 - Is the "low-dimensional, rank-32 LoRA captures all of RL" finding a property of the math domain, or a structural property of transformers under any RLVR? If the latter, that's a much bigger claim than the paper states.
 - Why does the promoted token live at rank ~2 specifically? Is there a theoretical reason RL's correction operator has bounded "step size" in rank-of-promoted-token, or is it an artifact of small RL learning rates?
 - Does this collapse if reasoning requires *exploring* outside the base model's distribution (e.g., out-of-distribution proof techniques, novel tool sequences)? The framework predicts: yes, it should collapse — and that's the cleanest test.
+
+## My proposed extensions
+*(See [`05-improvements.tex`](./05-improvements.tex) for the full set; top 3 distilled here.)*
+
+- **Lipschitz bound on rank displacement.** The mean-rank-≈-2.2 regularity across all four pairs is unexplained. I conjecture $\mathbb{E}[\Delta_t \mid t \in R] \leq C\eta / \beta$ under bounded GRPO learning rate $\eta$ and KL budget $\beta$. Testable by sweeping $\eta$ at fixed $\beta$ and checking linear scaling. Would close the loop between the empirical "rank ≈ 2" observation and the underlying optimisation dynamics.
+- **Hyperparameter-free quantile-based τ.** Replace fixed absolute threshold $\tau$ with $\tau = Q_q(H_t)$ for a single scale-invariant quantile $q$. Removes per-scale grid search. Prototype in `improvements/adaptive-tau.py` shows quantile gating is stable across prompts (5% target hit on both math and creative-writing prompts) while fixed-τ collapses (6% vs 43%) on the same inputs.
+- **LoRA delta as inference-time activation steering.** The rank-32 LoRA on $W_O$ has the same structure as steering-vector interventions. Could replace fine-tuning entirely with a search over steering directions applied only at high-entropy positions — eliminating not just the RL loop but the entire training stage.

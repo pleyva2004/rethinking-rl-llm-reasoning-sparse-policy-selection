@@ -73,7 +73,12 @@ Empirical: reranked fraction 1--4\%; the RL-promoted token sits at mean rank $\a
   \item ``1000$\times$ cheaper'' compares to full RL training only; ReasonMaxxer still needs labeled-correctness rollouts. Accounting could be sharper.
 \end{itemize}
 
+\section*{My One Proposed Extension}
+A Lipschitz bound on rank displacement. The paper observes the RL-promoted token sits at mean rank $\approx 2.2$ across all four base/RL pairs --- a striking regularity left unexplained. I conjecture that under bounded GRPO learning rate $\eta$ and per-step KL-to-reference budget $\beta$, the expected rank displacement satisfies $\mathbb{E}[\Delta_t \mid t \in R] \leq C\eta/\beta$. The derivation routes through the policy-ratio bound under the standard KL-clipped GRPO update \citep{shao2024grpo} and a Lipschitz argument on the softmax-rank-maximiser. Falsifiable with a single training-run sweep across $\eta$ at fixed $\beta$, checking linear scaling. Closes the loop between the empirical mean-rank observation and the underlying optimisation dynamics, and would extend cleanly to predict where the top-5 assumption breaks under higher-learning-rate regimes.
+
+\emph{Full proposal set: \texttt{05-improvements.tex} in the study repo.}
+
 \section*{My One Question}
-\emph{Is the mean-rank-$\approx 2$ regularity an artifact of bounded RL learning rates inducing a Lipschitz constraint on rank displacement, or is there something deeper about why RL's correction never reaches past the second-most-likely base candidate?}
+\emph{If the entire RL behavioural delta is captured by a rank-32 LoRA on $W_O$, why train at all? What's the obstacle to replacing the training stage with a search over inference-time steering vectors applied only at high-entropy positions?}
 
 \end{document}
