@@ -1,0 +1,173 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath, amssymb, amsthm, mathtools}
+\usepackage{hyperref}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{proposition}{Proposition}
+
+\title{Equivalence of Low-Rank LoRA Updates on $W_O$ \\ and Activation Steering at Decision Points}
+\author{Companion proof for Akg\"{u}l et al.\ (2026), \S 4.2}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section*{Setup}
+
+Fix a transformer layer and consider its multi-head attention output projection
+\[
+W_O \in \mathbb{R}^{d_{\mathrm{model}} \times d_{\mathrm{model}}},
+\]
+which maps the concatenation of per-head value contributions $h \in \mathbb{R}^{d_{\mathrm{model}}}$ into the residual stream.\footnote{For exposition we take the input and output dimension of $W_O$ to be equal to $d_{\mathrm{model}}$; the argument is unchanged if the input dimension differs (as it does when heads are not concatenated to the full width).} The base contribution into the residual stream at token position $t$ is
+\[
+y_t \;=\; W_O \, h_t.
+\]
+
+A LoRA adapter of rank $r \ll d_{\mathrm{model}}$ on $W_O$ consists of two trainable matrices
+\[
+A \in \mathbb{R}^{d_{\mathrm{model}} \times r}, \qquad B \in \mathbb{R}^{r \times d_{\mathrm{model}}},
+\]
+together with a scalar $\alpha > 0$, defining the additive update
+\begin{equation}
+\Delta_{\mathrm{LoRA}} \;=\; \tfrac{\alpha}{r}\, A B \;\in\; \mathbb{R}^{d_{\mathrm{model}} \times d_{\mathrm{model}}}.
+\label{eq:lora-def}
+\end{equation}
+With the adapter installed, the modified projection acts as
+\begin{equation}
+(W_O + \Delta_{\mathrm{LoRA}})\, h_t
+\;=\; W_O\, h_t \;+\; \tfrac{\alpha}{r}\, A B\, h_t.
+\label{eq:additive}
+\end{equation}
+Define
+\begin{equation}
+s_t \;\coloneqq\; \tfrac{\alpha}{r}\, A\, (B h_t) \;\in\; \mathbb{R}^{d_{\mathrm{model}}}.
+\label{eq:s-def}
+\end{equation}
+By construction $s_t = A z_t$ with $z_t \coloneqq (\alpha/r)\, B h_t \in \mathbb{R}^r$, so $s_t$ lies in the column space $\operatorname{col}(A)$, an at-most $r$-dimensional subspace of $\mathbb{R}^{d_{\mathrm{model}}}$.
+
+\medskip
+
+We adopt the following terminology, in line with the activation-steering literature.
+
+\begin{itemize}
+\item A \emph{steering basis of rank $r$} is an ordered tuple of vectors $(a_1, \dots, a_r)$ in $\mathbb{R}^{d_{\mathrm{model}}}$, equivalently a matrix $A = [a_1 \mid \dots \mid a_r] \in \mathbb{R}^{d_{\mathrm{model}}\times r}$.
+\item A \emph{coefficient field} is a function $c: \mathbb{R}^{d_{\mathrm{model}}} \to \mathbb{R}^r$, $h \mapsto c(h) = (c_1(h), \dots, c_r(h))^\top$.
+\item Given $(A, c)$, the associated \emph{steering intervention} adds, at every position $t$, the vector
+\[
+\sigma_t \;\coloneqq\; A\, c(h_t) \;=\; \sum_{i=1}^{r} c_i(h_t)\, a_i
+\]
+into the residual stream immediately after the (unmodified) output projection $W_O$.
+\item A \emph{gated steering intervention} additionally fixes a set $\mathcal{D} \subseteq \{1, \dots, T\}$ of \emph{decision points} (e.g., the high-entropy positions used by Akg\"{u}l et al.) and applies $\sigma_t$ only when $t \in \mathcal{D}$, leaving the residual stream untouched at $t \notin \mathcal{D}$.
+\end{itemize}
+
+We treat $h_t$ as the input to $W_O$ at position $t$; everything that follows is a per-position statement and is independent of how $h_t$ itself is computed.
+
+\section*{Proposition (Equivalence)}
+
+\begin{proposition}[LoRA--steering equivalence on $W_O$]
+\label{prop:equiv}
+Let $r \in \{1, 2, \dots, d_{\mathrm{model}}\}$. The following two classes of interventions on the residual stream coincide, viewed as families of functions $h \mapsto W_O h + \Delta(h)$ with $\Delta : \mathbb{R}^{d_{\mathrm{model}}} \to \mathbb{R}^{d_{\mathrm{model}}}$ linear of rank at most $r$:
+\begin{enumerate}
+\item[\textup{(a)}] \emph{Rank-$r$ LoRA on $W_O$:} interventions of the form \eqref{eq:additive} for some $A \in \mathbb{R}^{d_{\mathrm{model}}\times r}$, $B \in \mathbb{R}^{r \times d_{\mathrm{model}}}$, $\alpha > 0$.
+\item[\textup{(b)}] \emph{Rank-$r$ steering interventions with linear coefficient field:} interventions adding $\sigma_t = A\, c(h_t)$ at every position $t$, for some $A \in \mathbb{R}^{d_{\mathrm{model}}\times r}$ and some linear $c : \mathbb{R}^{d_{\mathrm{model}}} \to \mathbb{R}^r$.
+\end{enumerate}
+Moreover, the gated variant in which the LoRA contribution \eqref{eq:s-def} is applied only at positions $t \in \mathcal{D}$ coincides with the gated steering intervention with the same set $\mathcal{D}$.
+\end{proposition}
+
+\section*{Proof}
+
+\begin{proof}
+We prove the two inclusions (a)\,$\subseteq$\,(b) and (b)\,$\subseteq$\,(a) and then handle the gated case.
+
+\smallskip
+
+\noindent\textbf{Step 1: Algebraic additivity.}
+Since matrix multiplication distributes over addition,
+\begin{equation}
+(W_O + \Delta_{\mathrm{LoRA}})\, h_t
+\;=\; W_O\, h_t \;+\; \Delta_{\mathrm{LoRA}}\, h_t
+\;=\; W_O\, h_t \;+\; s_t,
+\label{eq:algebra}
+\end{equation}
+with $s_t$ as in \eqref{eq:s-def}. Thus, modifying the weight $W_O \mapsto W_O + \Delta_{\mathrm{LoRA}}$ is, at every position $t$, indistinguishable from leaving $W_O$ unchanged and instead injecting the additive perturbation $s_t$ into the residual stream after $W_O h_t$. This is precisely the operational definition of an activation-steering intervention applied at the output of the attention block.
+
+\smallskip
+
+\noindent\textbf{Step 2: (a) $\subseteq$ (b).}
+Fix a rank-$r$ LoRA $(\alpha, A, B)$. Define
+\[
+A' \;\coloneqq\; A, \qquad c(h) \;\coloneqq\; \tfrac{\alpha}{r}\, B\, h.
+\]
+Then $c$ is linear and the steering vector at $t$ is
+\[
+\sigma_t \;=\; A'\, c(h_t) \;=\; \tfrac{\alpha}{r}\, A\, B\, h_t \;=\; s_t,
+\]
+which by Step 1 reproduces the LoRA output \eqref{eq:additive} exactly. Hence every rank-$r$ LoRA on $W_O$ is realized by a rank-$r$ steering intervention with linear coefficient field, and $\sigma_t \in \operatorname{col}(A)$ for all $t$, an $r$-dimensional subspace.
+
+\smallskip
+
+\noindent\textbf{Step 3: (b) $\subseteq$ (a).}
+Conversely, fix a steering intervention $(A, c)$ with $A \in \mathbb{R}^{d_{\mathrm{model}}\times r}$ and $c : \mathbb{R}^{d_{\mathrm{model}}} \to \mathbb{R}^r$ \emph{linear}. By linearity there is a unique matrix $C \in \mathbb{R}^{r \times d_{\mathrm{model}}}$ with $c(h) = C h$ for all $h$.
+Choose $\alpha = r$ and set
+\[
+A'' \;\coloneqq\; A, \qquad B \;\coloneqq\; C.
+\]
+Then \eqref{eq:lora-def} gives $\Delta_{\mathrm{LoRA}} = (\alpha/r)\, A'' B = A C$, so by Step 1
+\[
+(W_O + \Delta_{\mathrm{LoRA}})\, h_t \;=\; W_O\, h_t \;+\; A\, C\, h_t \;=\; W_O\, h_t \;+\; A\, c(h_t) \;=\; W_O\, h_t \;+\; \sigma_t.
+\]
+The choice $\alpha = r$ is purely a normalization convention: any other $\alpha > 0$ recovers the same map by rescaling $B \leftarrow (r/\alpha)\, C$. Hence every rank-$r$ steering intervention with linear coefficient field is realized by a rank-$r$ LoRA on $W_O$.
+
+\smallskip
+
+\noindent\textbf{Step 4: Subspace identification.}
+Combining Steps 2 and 3, the class
+\[
+\mathcal{F}_r \;\coloneqq\; \bigl\{ \Delta : \mathbb{R}^{d_{\mathrm{model}}} \to \mathbb{R}^{d_{\mathrm{model}}} \;:\; \Delta \text{ linear, } \operatorname{rank}(\Delta) \le r \bigr\}
+\]
+is exactly the set of perturbation maps reachable both by rank-$r$ LoRA on $W_O$ and by rank-$r$ linear steering interventions. Indeed, every $\Delta = AB$ with $A \in \mathbb{R}^{d_{\mathrm{model}}\times r}, B \in \mathbb{R}^{r \times d_{\mathrm{model}}}$ has rank at most $r$; and conversely, any linear $\Delta$ of rank at most $r$ admits a (non-unique) factorization $\Delta = AB$ with $A, B$ of these shapes, e.g.\ via a thin SVD $\Delta = U \Sigma V^\top$ truncated to its $r$ leading components, taking $A = U\Sigma$ and $B = V^\top$. Thus the LoRA-update class and the linear-steering class coincide as the set of rank-$\le r$ linear maps $\mathbb{R}^{d_{\mathrm{model}}} \to \mathbb{R}^{d_{\mathrm{model}}}$ added to $W_O h_t$.
+
+\smallskip
+
+\noindent\textbf{Step 5: Gated/sparse case.}
+Let $\mathcal{D} \subseteq \{1, \dots, T\}$ be a set of decision points, and let $\mathbf{1}_{\mathcal{D}}(t) \in \{0, 1\}$ be its indicator. The \emph{gated LoRA} intervention applies $\Delta_{\mathrm{LoRA}}$ only at positions $t \in \mathcal{D}$, producing
+\[
+y_t^{\mathrm{gated}} \;=\; W_O h_t \;+\; \mathbf{1}_{\mathcal{D}}(t)\, s_t.
+\]
+The gated steering intervention with the same $\mathcal{D}$ and $(A, c) = (A, (\alpha/r) B \,\cdot\,)$ produces
+\[
+W_O h_t \;+\; \mathbf{1}_{\mathcal{D}}(t)\, \sigma_t,
+\]
+and $\sigma_t = s_t$ by Step 2. Hence the two are equal at every position $t$, including $t \notin \mathcal{D}$ (where both reduce to $W_O h_t$). The same argument run with Step 3 in place of Step 2 establishes the converse: any gated rank-$r$ linear steering intervention can be realized as a gated rank-$r$ LoRA. Note that gating commutes with the LoRA--steering identification because gating is applied to the output additive term, not to the linear factorization itself.
+
+\smallskip
+
+\noindent\textbf{Step 6: Conclusion.}
+We have shown that, on a per-token basis and as functions of $h_t$, the rank-$r$ LoRA update class on $W_O$ and the rank-$r$ linear-steering intervention class at the output of $W_O$ are the same set of maps. The same equivalence holds verbatim for their gated/sparse variants restricted to a common set of decision points $\mathcal{D}$. This proves Proposition~\ref{prop:equiv}.
+\end{proof}
+
+\section*{Discussion}
+
+\paragraph{What the equivalence does give.}
+Proposition~\ref{prop:equiv} is a \emph{constructive} identification: given a trained rank-$32$ LoRA $(\alpha, A, B)$ on $W_O$ as reported in Akg\"{u}l et al.\ \S 4.2, the explicit steering recipe is
+\[
+\boxed{\;\sigma_t \;=\; \tfrac{\alpha}{r}\, A\, (B h_t)\;,\qquad t \in \mathcal{D},\;}
+\]
+with $\mathcal{D}$ the set of high-entropy positions. The base model is left untouched: no weights are modified at inference, only an additive vector in the $r$-dimensional subspace $\operatorname{col}(A)$ is injected into the residual stream after the attention output projection at decision points. In particular, the entire RL+distillation pipeline is, at the level of \emph{inference-time computation}, equivalent to a rank-$r$ activation-steering hook with a linear coefficient field. This is consistent with Akg\"{u}l et al.'s observation that the post-RL behavioural delta is captured by 0.27--0.49\% of the parameters concentrated in $W_O$: that delta is precisely a rank-$32$ map of the form $A B$, and our proposition shows it is interchangeable with steering.
+
+\paragraph{What the equivalence does \emph{not} give.}
+Proposition~\ref{prop:equiv} is purely about the \emph{class} of maps; it is silent about how to \emph{find} a good $A$ (and, if one is unwilling to read $B$ off a trained LoRA, how to find $B$ or equivalently the coefficient field $c$) without first training the LoRA. Concretely:
+\begin{enumerate}
+\item The proposition does not eliminate the supervisory signal: somewhere in the pipeline, information about the desired post-RL behaviour must enter. Reading off $A, B$ from a trained LoRA simply moves that supervision from inference time to training time.
+\item For a steering-only deployment, one must replace gradient-descent-on-RL-objective with a different procedure for selecting $A$ (a rank-$r$ subspace) and the coefficients $c$. Candidate procedures include: activation-difference-by-class between base and RL on a held-out probe set; PCA on the per-token activation deltas $(h_t^{\mathrm{RL}} - h_t^{\mathrm{base}})$ restricted to high-entropy positions; or contrastive activation addition. Each of these is a distinct optimization problem with its own approximation error and is not addressed here.
+\item The proposition makes no claim that the \emph{best} rank-$r$ steering vectors found by a non-RL procedure equal the LoRA found by RL. They live in the same function class, but the RL-trained LoRA is the optimum of a particular loss, and a PCA-based steering vector is the optimum of a different loss. Equivalence of \emph{hypothesis classes} does not imply equivalence of \emph{learned representatives}.
+\end{enumerate}
+
+\paragraph{An empirical test.}
+Proposition~\ref{prop:equiv} suggests a falsifiable comparison consistent with the Akg\"{u}l et al.\ setup. Train, once, the rank-$32$ entropy-gated LoRA on $W_O$ as in \S 4.2; call its post-RL behavioural metric $M_{\mathrm{LoRA}}$. Separately, on the same base model, compute a rank-$32$ steering basis $\widehat{A}$ as the top-$32$ principal directions of the per-token activation deltas $(h_t^{\mathrm{RL}} - h_t^{\mathrm{base}})$ over a calibration set of high-entropy positions, and a coefficient field $\widehat{c}(h) = \widehat{C} h$ fit by least squares to predict the projection of those deltas onto $\widehat{A}$. Apply $\widehat{\sigma}_t = \widehat{A}\,\widehat{c}(h_t)$ as a gated steering hook at the same set of decision points and measure $M_{\mathrm{steer}}$. Proposition~\ref{prop:equiv} guarantees $M_{\mathrm{steer}} = M_{\mathrm{LoRA}}$ \emph{would} hold if the PCA-plus-least-squares estimator recovered the trained $(A,B)$ exactly; the gap $M_{\mathrm{LoRA}} - M_{\mathrm{steer}}$ therefore measures the cost of replacing gradient descent by the activation-difference proxy, isolated from the cost of restricting to the rank-$r$ class.
+
+\paragraph{Where the equivalence could break.}
+Two boundary conditions are worth flagging. First, our argument treats the steering coefficient $c(h)$ as \emph{linear} in $h$. A LoRA on $W_O$ is, by construction, linear in $h_t$, so this restriction is necessary for an exact equivalence; a steering scheme with a nonlinear $c$ (e.g.\ a learned MLP gate) strictly contains the LoRA class. Second, our argument is per-position: it is agnostic to whether the hook is applied during prefill or only during decoding, and it does not address residual interactions between layers. Both extensions are straightforward but not needed for the statement above.
+
+\end{document}

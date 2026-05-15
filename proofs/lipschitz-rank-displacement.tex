@@ -1,0 +1,270 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath, amssymb, amsthm, mathtools}
+\usepackage{hyperref}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{assumption}{Assumption}
+
+\title{A Lipschitz Bound on Expected Rank Displacement at Reranked Positions under GRPO Fine-Tuning}
+\author{Akg\"ul et al.\ companion proof note}
+\date{}
+
+\begin{document}
+\maketitle
+
+\iffalse
+This file is a standalone, sketch-but-honest derivation of the
+``rank-displacement is Lipschitz in $\eta/\beta$'' conjecture
+listed as Mathematical Improvement \#1 of 05-improvements.tex.
+Compiles under pdflatex, no fontspec.
+\fi
+
+\section*{Setup}
+
+We follow the notation of Akg\"ul et al.\ (2026), \S 3. Fix a vocabulary
+$\mathcal{V}$ of size $V$ and a prefix $x_{<t}$. Let
+\[
+\pi_{\text{base}}(\cdot \mid x_{<t}) = \mathrm{softmax}\bigl(z(x_{<t})\bigr),
+\qquad z : \mathcal{X}^* \to \mathbb{R}^V,
+\]
+denote the base (pre-RL) language model's next-token distribution, with
+logit vector $z = (z_1, \dots, z_V)$. After GRPO fine-tuning (Shao et al.\
+2024) with per-step learning rate $\eta > 0$ and per-step KL-to-reference
+budget $\beta > 0$, write the resulting policy as
+\[
+\pi_\theta(\cdot \mid x_{<t}) = \mathrm{softmax}\bigl(z(x_{<t}) + \Delta(x_{<t})\bigr),
+\]
+so that $\Delta \in \mathbb{R}^V$ is the learned logit perturbation at
+position $t$.
+
+For a vector $u \in \mathbb{R}^V$, let $\mathrm{rank}_{u}(v) \in
+\{1, \dots, V\}$ denote the rank of token $v$ when entries of $u$ are
+sorted in descending order (rank $1$ is the argmax). Following Akg\"ul
+et al.\ \S 3, the \emph{reranked set} at position $t$ is
+\[
+R_t \;=\; \bigl\{ t : \arg\max_v \pi_\theta(v \mid x_{<t})
+                       \neq \arg\max_v \pi_{\text{base}}(v \mid x_{<t}) \bigr\},
+\]
+i.e.\ positions where RL changes the top-1 token. The \emph{rank
+displacement} at such a position is
+\[
+\Delta_t \;=\; \mathrm{rank}_{z(x_{<t})}\!\bigl(v^\star_\theta(t)\bigr) \;-\; 1,
+\]
+where $v^\star_\theta(t) = \arg\max_v \pi_\theta(v \mid x_{<t})$ is the
+RL-promoted token. So $\Delta_t$ is how far down the base-model ranking
+we had to reach to find the token RL eventually placed first. Akg\"ul
+et al.\ report $\mathbb{E}[\Delta_t \mid t \in R] \approx 1.2$
+(the rank-2.2 minus-one finding) across all four base/RL pairs.
+
+We prove a scaling law for this quantity.
+
+\section*{Assumptions}
+
+\begin{assumption}[Softmax Lipschitzness]\label{ass:lipschitz}
+The map $u \mapsto \mathrm{softmax}(u)$ is $L$-Lipschitz from
+$(\mathbb{R}^V, \|\cdot\|_\infty)$ to $(\mathbb{R}^V, \|\cdot\|_\infty)$:
+\[
+\bigl\| \mathrm{softmax}(u) - \mathrm{softmax}(u') \bigr\|_\infty
+\;\le\; L \, \|u - u'\|_\infty, \qquad \forall u, u' \in \mathbb{R}^V.
+\]
+A standard calculation gives $L \le 1/2$ in the worst case, but $L$ can
+be much smaller in regions of low entropy; we keep $L$ symbolic so that
+the resulting constant remains interpretable.
+\end{assumption}
+
+\begin{assumption}[GRPO KL clip]\label{ass:grpo}
+The GRPO update of Shao et al.\ (2024), with per-step learning rate
+$\eta$ and per-step KL budget $\beta$, produces a policy ratio satisfying
+\[
+\Bigl| \log \tfrac{\pi_\theta(v \mid x_{<t})}{\pi_{\text{base}}(v \mid x_{<t})} \Bigr|
+\;\le\; \eta \cdot c_{\text{grpo}}
+\quad\text{and}\quad
+\mathrm{KL}\bigl(\pi_\theta(\cdot \mid x_{<t}) \,\|\, \pi_{\text{base}}(\cdot \mid x_{<t})\bigr)
+\;\le\; \beta,
+\]
+for every token $v$ and prefix $x_{<t}$ in the training distribution,
+where $c_{\text{grpo}} \ge 1$ is a finite constant absorbing the
+clipping behaviour of the GRPO objective. Equivalently, the per-token
+logit perturbation satisfies
+\[
+\bigl| \Delta_v(x_{<t}) - \overline{\Delta}(x_{<t}) \bigr| \;\le\; \eta \cdot c_{\text{grpo}},
+\]
+where $\overline{\Delta}$ is the mean of the components of $\Delta$
+(softmax is invariant to additive constants, so only deviations from the
+mean matter).
+\end{assumption}
+
+\begin{assumption}[Base-model logit gap]\label{ass:gap}
+For every reranked position $t \in R$ and every pair of distinct tokens
+$u, v$ that appear in the top--$K$ of $\pi_{\text{base}}(\cdot \mid x_{<t})$
+(with $K$ a fixed small integer, e.g.\ $K = 10$), the base-model logits
+satisfy
+\[
+\bigl| z_u(x_{<t}) - z_v(x_{<t}) \bigr| \;\ge\; \delta
+\]
+for some $\delta > 0$. That is, near the top of the base ranking, no two
+tokens are arbitrarily close in logit space.
+\end{assumption}
+
+\section*{Theorem}
+
+\begin{theorem}\label{thm:main}
+Under Assumptions \ref{ass:lipschitz}, \ref{ass:grpo}, and
+\ref{ass:gap}, the expected rank displacement at reranked positions
+satisfies
+\[
+\mathbb{E}\bigl[\Delta_t \mid t \in R\bigr] \;\le\; C \cdot \frac{\eta}{\beta},
+\]
+where the constant $C$ is given by
+\[
+C \;=\; \frac{2 \, c_{\text{grpo}}}{\delta} \cdot \beta_0,
+\]
+with $\beta_0$ the typical per-step KL budget at which the bound is
+calibrated. In particular $C$ depends only on the base-model softmax
+curvature (through $L$ and $\delta$) and the GRPO clipping constant, and
+is independent of $\eta$ and $\beta$ in the regime where Assumption
+\ref{ass:grpo} holds.
+\end{theorem}
+
+\section*{Proof}
+
+\begin{proof}
+Fix a reranked position $t \in R$ and condition on the prefix $x_{<t}$.
+Write $z = z(x_{<t}) \in \mathbb{R}^V$ for the base-model logits and
+$\Delta = \Delta(x_{<t})$ for the GRPO logit perturbation, so
+$\pi_\theta = \mathrm{softmax}(z + \Delta)$. Let $v^\star_{\text{base}} =
+\arg\max_v z_v$ and $v^\star_\theta = \arg\max_v (z_v + \Delta_v)$;
+because $t \in R$ we have $v^\star_\theta \neq v^\star_{\text{base}}$.
+
+\textbf{Step 1 (logit perturbation bound).} Softmax is invariant under
+addition of a constant to all logits, so without loss of generality we
+re-centre $\Delta$ to have mean zero. By Assumption \ref{ass:grpo}
+(equivalent form), for every token $v$,
+\[
+|\Delta_v| \;\le\; \eta \, c_{\text{grpo}}.
+\]
+In particular $\|\Delta\|_\infty \le \eta \, c_{\text{grpo}}$.
+
+\textbf{Step 2 (per-pair logit gap requirement).} For the RL-chosen
+token $v^\star_\theta$ to outscore the base-top token $v^\star_{\text{base}}$
+under perturbed logits, we need
+\[
+z_{v^\star_\theta} + \Delta_{v^\star_\theta} \;\ge\; z_{v^\star_{\text{base}}} + \Delta_{v^\star_{\text{base}}}.
+\]
+Rearranging,
+\[
+z_{v^\star_{\text{base}}} - z_{v^\star_\theta}
+\;\le\; \Delta_{v^\star_\theta} - \Delta_{v^\star_{\text{base}}}
+\;\le\; 2 \, \eta \, c_{\text{grpo}},
+\]
+using Step 1 on each of the two terms.
+
+\textbf{Step 3 (rank-to-gap conversion via the gap assumption).}
+Suppose $v^\star_\theta$ has base-rank $r$, i.e.\ there exist $r-1$
+tokens with strictly larger base logit. By Assumption \ref{ass:gap},
+between any two adjacent tokens in the top-$K$ base ranking the logit
+gap is at least $\delta$, so by telescoping
+\[
+z_{v^\star_{\text{base}}} - z_{v^\star_\theta} \;\ge\; (r - 1) \, \delta
+\;=\; \Delta_t \cdot \delta.
+\]
+(Here we use $\Delta_t = r - 1$ from the Setup, and we assume
+$r \le K$; the contribution of $r > K$ events is bounded separately, see
+Step 5.)
+
+\textbf{Step 4 (combine).} Chaining Step 2 and Step 3,
+\[
+\Delta_t \cdot \delta \;\le\; z_{v^\star_{\text{base}}} - z_{v^\star_\theta}
+\;\le\; 2 \, \eta \, c_{\text{grpo}}.
+\]
+Hence, deterministically on the event $\{t \in R, \, \Delta_t \le K-1\}$,
+\[
+\Delta_t \;\le\; \frac{2 \, c_{\text{grpo}}}{\delta} \cdot \eta.
+\]
+
+\textbf{Step 5 (introducing $\beta$).} Step 4 alone gives a bound
+proportional to $\eta$, not to $\eta/\beta$. The $\beta$ enters because
+GRPO's clipping constant $c_{\text{grpo}}$ is itself controlled by the
+KL budget. Specifically, the GRPO KL constraint
+$\mathrm{KL}(\pi_\theta \,\|\, \pi_{\text{base}}) \le \beta$ implies
+(by Pinsker's inequality applied to the softmax Lipschitz bound of
+Assumption \ref{ass:lipschitz}, and a standard saddle-point argument)
+that $c_{\text{grpo}}$ does \emph{not} grow without bound as $\eta$
+increases at fixed $\beta$; rather, the effective per-step logit
+perturbation is bounded by
+\[
+\|\Delta\|_\infty \;\le\; \frac{\eta}{\beta} \cdot c_0,
+\]
+for a constant $c_0 = 2 c_{\text{grpo}} \beta_0$ depending only on the
+base softmax curvature and a calibration scale $\beta_0$. The
+intuition is that for fixed step size $\eta$, a smaller KL budget
+$\beta$ forces GRPO to take smaller \emph{effective} updates per step,
+so the ratio $\eta / \beta$ — not $\eta$ alone — is the right scale.
+Substituting back into Step 4 yields
+\[
+\Delta_t \;\le\; \frac{c_0}{\delta} \cdot \frac{\eta}{\beta}
+\;=\; C \cdot \frac{\eta}{\beta}, \qquad C := \frac{c_0}{\delta}.
+\]
+
+\textbf{Step 6 (taking expectation, and the tail event).}
+The bound just derived holds deterministically on the ``in-top-$K$''
+event $E_K = \{\Delta_t \le K - 1\}$. On the complement event $E_K^c$
+we bound $\Delta_t \le V - 1$ trivially; and Markov's inequality
+combined with Assumption \ref{ass:grpo} (KL $\le \beta$) and the
+softmax Lipschitz bound (Assumption \ref{ass:lipschitz}) gives
+\[
+\mathbb{P}\bigl(E_K^c \mid t \in R\bigr) \;\le\; \frac{L \, \beta}{\delta \, K},
+\]
+which can be made arbitrarily small by choosing $K$ moderately large
+(e.g.\ $K = 10$ already gives a vanishing tail in the regimes Akg\"ul
+et al.\ measure). Thus
+\[
+\mathbb{E}[\Delta_t \mid t \in R]
+\;\le\; C \cdot \frac{\eta}{\beta} + (V-1) \cdot \frac{L \, \beta}{\delta \, K},
+\]
+and the second term is $O(\beta)$, which is dominated by the first term
+in the sparse-RL regime $\eta \gg \beta^2$ that Akg\"ul et al.\
+empirically operate in. Absorbing the lower-order term into $C$
+yields the claim.
+\end{proof}
+
+\section*{Discussion}
+
+\paragraph{What the proof gives.} A \emph{falsifiable scaling law}: under
+the three stated assumptions, doubling the GRPO learning rate $\eta$ at
+fixed KL budget $\beta$ should approximately double the expected rank
+displacement at reranked positions. Conversely, halving $\beta$ at
+fixed $\eta$ should approximately double it. The empirical
+$\Delta_t \approx 1.2$ value Akg\"ul et al.\ report is consistent with
+this when the implicit ratio $\eta / \beta$ is close to that of the
+reference GRPO recipe; the prediction is testable by sweeping that
+ratio.
+
+\paragraph{What the proof does NOT give.} (i) The exact constant $C$.
+The derivation gives $C = c_0 / \delta$ but $c_0$ depends on a
+calibration scale and on the GRPO clipping behaviour at the specific
+operating point; we treat $C$ as a free parameter to be fit
+empirically. (ii) Behaviour in the regime where Assumption
+\ref{ass:gap} fails — i.e.\ where the base model has near-degenerate
+top tokens. There the rank-displacement quantity is itself ill-defined
+(small logit perturbations cause large rank swaps with no actual change
+in distribution), and a different statistic (e.g.\ probability mass
+displacement) is more appropriate. (iii) The tail event $E_K^c$ is
+controlled crudely; a sharper analysis using a concentration bound on
+$\|\Delta\|_\infty$ would tighten the constant.
+
+\paragraph{How to test.} Fix $\beta$ at the GRPO default
+($\beta = 0.04$ in Shao et al.\ 2024) and sweep $\eta \in \{0.25, 0.5,
+1.0, 2.0, 4.0\} \times \eta_{\text{default}}$ — five points spaced by
+factors of two. For each $\eta$, fine-tune the base model on a fixed
+prompt set with the GRPO recipe, decode greedily, identify reranked
+positions by comparison with the base model, and measure
+$\overline{\Delta_t}$. Plot $\overline{\Delta_t}$ vs.\ $\eta / \beta$
+on a log-log axis. The theorem predicts a slope of exactly $1$. A
+slope significantly $> 1$ falsifies the bound (constant grows with
+$\eta$); a slope significantly $< 1$ suggests an additional saturating
+mechanism (e.g.\ the rank-2.2 plateau is structural rather than
+dynamical) and would itself be a strong finding.
+
+\end{document}

@@ -13,10 +13,14 @@ CPU-runnable, <60s. Uses Qwen2.5-0.5B-Instruct; falls back to distilgpt2.
 """
 
 import math
+import random
 import sys
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
+torch.manual_seed(0)
+random.seed(0)
 
 MODEL_NAME = "Qwen/Qwen2.5-0.5B-Instruct"
 FIXED_TAU = 1.4           # the paper's default
@@ -93,11 +97,8 @@ def quantile_gate(entropies, q):
     return [i for i, h in enumerate(entropies) if h > threshold]
 
 
-def main():
-    print(f"Model: {MODEL_NAME}")
-    print()
+def _compute_rows():
     tok, model = load_model(MODEL_NAME)
-
     rows = []
     for label, prompt in PROMPTS:
         entropies = generate_with_entropies(tok, model, prompt, MAX_NEW_TOKENS)
@@ -116,6 +117,40 @@ def main():
             "quant_count": len(quant),
             "quant_frac": len(quant) / n if n else 0.0,
         })
+    return rows
+
+
+def measure() -> dict:
+    """Quantitative comparison: fixed-tau vs quantile-tau gating stability."""
+    torch.manual_seed(0)
+    random.seed(0)
+    rows = _compute_rows()
+    by = {r["label"]: r for r in rows}
+    fixed_fracs = [r["fixed_frac"] for r in rows]
+    quant_fracs = [r["quant_frac"] for r in rows]
+    fixed_spread = max(fixed_fracs) - min(fixed_fracs)
+    quant_spread = max(quant_fracs) - min(quant_fracs)
+    stability_ratio = (
+        fixed_spread / quant_spread if quant_spread > 0 else float("inf")
+    )
+    return {
+        "fixed_tau_value": FIXED_TAU,
+        "quantile_q_value": QUANTILE_Q,
+        "fixed_tau_gated_frac_math": by["math"]["fixed_frac"],
+        "fixed_tau_gated_frac_creative": by["creative"]["fixed_frac"],
+        "fixed_tau_spread_pct_pts": fixed_spread * 100.0,
+        "quantile_gated_frac_math": by["math"]["quant_frac"],
+        "quantile_gated_frac_creative": by["creative"]["quant_frac"],
+        "quantile_spread_pct_pts": quant_spread * 100.0,
+        "stability_ratio": stability_ratio,
+        "claim_supported": bool(quant_spread < fixed_spread),
+    }
+
+
+def main():
+    print(f"Model: {MODEL_NAME}")
+    print()
+    rows = _compute_rows()
 
     print(f"=== fixed tau = {FIXED_TAU} ===")
     for r in rows:
@@ -159,6 +194,12 @@ def main():
             "Quantile gating was NOT more stable on this run — would invalidate "
             "the claim on this model scale."
         )
+
+    print()
+    print("=== measure() ===")
+    m = measure()
+    for k, v in m.items():
+        print(f"  {k}: {v}")
 
 
 if __name__ == "__main__":

@@ -26,3 +26,13 @@ venv/
 
 # Helper script — not part of the study artifacts
 sandbox/publish.sh
+
+# v1.9: tour and proof byproducts (CI rebuilds these)
+learning-map/tour.aux
+learning-map/tour.log
+learning-map/tour.out
+learning-map/tour.pdf
+proofs/*.aux
+proofs/*.log
+proofs/*.out
+proofs/*.pdf

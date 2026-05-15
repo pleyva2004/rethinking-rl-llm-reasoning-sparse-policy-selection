@@ -1,0 +1,153 @@
+\iffalse
+Tour artifact for Akgul et al. 2026 (arXiv:2605.06241).
+Companion to tour.md and tour.ipynb in this directory.
+Written per the write-latex skill rules:
+  - no fontspec
+  - section* (unnumbered) by default
+  - pdflatex-clean
+  - comments only inside iffalse ... fi
+\fi
+
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{mathtools}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{hyperref}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=blue,
+  urlcolor=blue
+}
+
+\title{Tour --- Akg\"ul et al.\ 2026: Sparse Policy Selection for LLM Reasoning}
+\author{Learning-map artifact}
+\date{Generated 2026-05-15 \\ \texttt{arXiv:2605.06241}}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+A guided learning path through Akg\"ul et al.\ 2026, the foundation concepts it depends on, and the constructive extensions worth building. Companion to \texttt{tour.md} and \texttt{tour.ipynb}.
+\end{abstract}
+
+\section*{Section 1 --- Reader's Contract}
+
+\textbf{Who this is for.} Mathematicians, ML researchers in adjacent subfields (optimisation, probability, statistical learning), and engineers comfortable reading per-token training equations. The paper is empirical-mechanistic with a thin but sharp probabilistic spine; you will get more out of it if you are comfortable manipulating expectations over discrete distributions and reading KL terms without flinching.
+
+\textbf{Background assumed.} Linear algebra at the level of eigenvalues and linear maps; multivariate calculus through the Jacobian; probability through random variables, expectation, and variance; Shannon information at the level of entropy and KL. No measure theory required for the body.
+
+Four pre-built foundation tours are available; we recommend the math-grad tour as the entry point for this paper:
+
+\begin{longtable}{@{}ll@{}}
+\toprule
+Audience & Tour \\
+\midrule
+Novice & \url{https://github.com/pleyva2004/math-foundations/blob/main/tours/novice.md} \\
+CS undergrad & \url{https://github.com/pleyva2004/math-foundations/blob/main/tours/cs-undergrad.md} \\
+\textbf{Math grad (recommended)} & \url{https://github.com/pleyva2004/math-foundations/blob/main/tours/math-grad.md} \\
+Researcher & \url{https://github.com/pleyva2004/math-foundations/blob/main/tours/researcher.md} \\
+\bottomrule
+\end{longtable}
+
+\textbf{Expected reading time.} 3--4 hours for a focused first pass.
+
+\textbf{One-sentence elevator.} Akg\"ul et al.\ show that RL post-training on verifiable rewards (RLVR) for math reasoning is \emph{not} learning new capabilities --- it is performing a sparse, entropy-gated re-selection at roughly the top 2--8\% of token positions, where the RL policy promotes a token that the base model already had at mean rank $\approx 2.2$, and the entire effect can be reproduced by an offline contrastive fine-tune (\emph{ReasonMaxxer}) with no rollouts.
+
+\section*{Section 2 --- Foundations Walk}
+
+Topological order: probability before information theory before linear algebra applied to gradients. Levels come from the math-foundations manifest. ``Why this paper needs it'' is sourced from \texttt{02-math-deep-dive.md}.
+
+\begin{longtable}{@{}p{0.3cm}p{3.5cm}p{1.6cm}p{1.5cm}p{6.5cm}@{}}
+\toprule
+\# & Concept & Level & Pacing & Why this paper needs it \\
+\midrule
+\endhead
+06 & Linear Maps and Matrices & intermediate & skim & Attention projections $W_Q, W_K, W_V, W_O$ are linear maps; LoRA delta $\Delta W = BA$ is a low-rank decomposition. \\
+07 & Eigenvalues and Eigenvectors & intermediate & skim & Spectral structure of the rank-32 LoRA delta and the operator-norm step in the proposed Lipschitz bound. \\
+14 & Gradient and Jacobian & advanced & read & Contrastive loss and base-anchoring KL are differentiated through the softmax Jacobian. \\
+22 & Random Variables & advanced & skim & Each rollout $o = (o_1, \ldots, o_T) \sim \pi(\cdot \mid q)$ is a discrete-time random sequence; $H_t$ is a deterministic function of a categorical RV. \\
+23 & Probability Distributions & advanced & read & $\pi_\theta(\cdot \mid q, o_{<t})$ is a categorical distribution; everything in the paper is an operation on these per-position distributions. \\
+25 & Expectation & advanced & read & Shannon entropy is $\mathbb{E}[-\log p]$; GRPO advantage normalisation is per-rollout sample-mean centering. \\
+26 & Variance and Covariance & advanced & skim & Per-rollout normalised advantage $\hat A_i = (r_i - \mu)/\sigma$ stabilises gradient variance. \\
+36 & Shannon Entropy & advanced & \textbf{drill into proof} & Central object: $H_t = -\sum_v \pi_{\text{base}}(v\mid q, o_{<t})\,\log \pi_{\text{base}}(v\mid q, o_{<t})$. \\
+37 & Cross-Entropy & advanced & read & The contrastive loss is structurally a cross-entropy between an advantage-weighted target and $\pi_\theta$. \\
+38 & KL Divergence & advanced & \textbf{drill into proof} & Anchoring loss $\mathrm{KL}(\pi_{\text{base}} \,\Vert\, \pi_\theta)$ pins $\pi_\theta$ to base outside decision points; the asymmetry is load-bearing. \\
+\bottomrule
+\end{longtable}
+
+Total: 10 nodes. Two earn the ``drill into proof'' tag: entropy (the paper's organising principle) and KL (the asymmetry choice is non-obvious).
+
+Concept pages live at \url{https://github.com/pleyva2004/math-foundations/blob/main/concepts/<NN>-<slug>/README.md}.
+
+\section*{Section 3 --- Paper Concepts Walk}
+
+Paper-specific objects pulled directly from \texttt{02-math-deep-dive.md}.
+
+\begin{longtable}{@{}p{0.6cm}p{4.5cm}p{6.5cm}p{4cm}@{}}
+\toprule
+\# & Concept & What it does in the paper & Where it appears \\
+\midrule
+\endhead
+P1 & Token-level entropy $H_t$ & Per-position predictive entropy under $\pi_{\text{base}}$. The single scalar that decides whether a position is a ``decision point''. & eq.\ (1), \S Central Object \\
+P2 & Decision-point set $D^{(i)}$ & $\{t : H_t > \tau\}$. The sparse subset of positions on which RL actually changes anything; empirically 2--8\% of tokens. & \S Central Object \\
+P3 & GRPO advantage normalisation & $\hat A_i = (r_i - \mu)/\sigma$. Per-rollout variance-stabilising centering. & \S Per-rollout normalised advantage \\
+P4 & Reranked vs shifted classification & A position is \emph{reranked} if RL's argmax differs from base's but lies in base top-5; \emph{shifted} if outside top-5. Headline: shifted $\approx 0.01$--$0.12\%$. & Table 2 / \S Disagreement statistics \\
+P5 & Contrastive loss $\mathcal{L}_{\text{contrast}}$ & Advantage-weighted log-likelihood, restricted to $t \in D^{(i)}$. The ``do-something'' half of ReasonMaxxer. & \S ReasonMaxxer \\
+P6 & Base-anchoring KL $\mathcal{L}_{\text{anchor}}$ & $\sum_i \sum_{t \notin D^{(i)}} \mathrm{KL}(\pi_{\text{base}} \,\Vert\, \pi_\theta)$. The ``do-no-harm'' half. & \S Base-anchoring KL \\
+P7 & KL-clipped policy ratio (mostly \emph{discarded}) & Inherits group-normalisation from GRPO but discards the clipped ratio and KL-to-reference penalty. & \S Note: this is the same normalisation as GRPO \\
+P8 & Rank-32 LoRA on QKVO & Full RL$\rightarrow$base behavioural delta reproduced by a rank-32 LoRA on attention QKVO via KL distillation. & \S A separate experimental thread \\
+P9 & Weight tying with input embedding & Most of the LoRA contribution concentrates in $W_O$; combined with LM-head weight tying, makes the change interpretable as an embedding-space direction. & \S LoRA QKVO \\
+\bottomrule
+\end{longtable}
+
+\section*{Section 4 --- Improvements Walk}
+
+Parsed from \texttt{05-improvements.tex}. Math/Theoretical proposals are validated by PROOF (LaTeX in \texttt{proofs/}); Code/Experimental by MEASUREMENT (Python in \texttt{improvements/} with a \texttt{measure()} function whose output is checked).
+
+\subsection*{Mathematical}
+
+\textbf{M1 --- Lipschitz bound on rank displacement.} Across all four base/RL pairs Akg\"ul report, the RL-promoted token sits at base-rank 2.14 to 2.39 --- a suspiciously narrow band. Conjecture: under bounded GRPO learning rate $\eta$ and per-step KL-budget $\beta$, the rank displacement at decision points is Lipschitz in $(\eta, \beta)$. A perturbation argument on the softmax Jacobian, combined with the operator-norm bound on the GRPO update, should yield a quantitative bound that recovers the empirical rank-2 regularity from first principles. \\
+\textit{Validation: PROOF} --- \texttt{proofs/lipschitz-rank-displacement.tex}
+
+\textbf{M2 --- Information-theoretic tightening of ``top-5 suffices''.} The paper observes that 99.88--99.99\% of RL choices stay inside base top-5 but offers no bound. An information-theoretic argument (e.g.\ Fano on the reward channel) should yield $k$-dependent bounds of the form ``with high probability under bounded KL budget, the RL choice lies in base top-$k$ for $k \lesssim f(H_t, \beta)$.'' \\
+\textit{Validation: PROOF} --- \texttt{proofs/info-theoretic-top-k.tex} \emph{(deferred --- not building this proof in v1.9)}
+
+\subsection*{Code (Implementation)}
+
+\textbf{C1 --- Hyperparameter-free quantile-based gating.} Replace the absolute threshold $\tau$ (currently grid-searched per model/scale) with $D^{(i)} = \{t : H_t^{(i)} > Q_q(\{H_t\}_{t=1}^{T_i})\}$ where $q$ is a single scale-invariant percentile. The fixed absolute $\tau = 1.4$ collapses (gates 6.2\% on one prompt, 42.7\% on another); the quantile gate gates exactly $1-q$ of every prompt by construction. \\
+\textit{Validation: MEASUREMENT} --- \texttt{improvements/adaptive-tau.py} (extended with \texttt{measure()}). Expected output: \texttt{\{"fixed\_tau\_gated\_pct": [6.2, 42.7], "quantile\_gated\_pct": [5.0, 5.0], "stability\_ratio": $\approx$7x\}}.
+
+\textbf{C2 --- Single-pass entropy scoring.} A streaming implementation that fuses $H_t$ computation into the forward pass (logit reuse + online running sum) is $\sim 2\times$ faster and constant-memory. \\
+\textit{Validation: MEASUREMENT} --- \texttt{improvements/streaming-entropy.py} (NEW). Expected output: \texttt{\{"naive\_ms": ..., "streaming\_ms": ..., "speedup": $\approx$2.0, "max\_abs\_diff": $<$1e-6\}}.
+
+\subsection*{Experimental}
+
+\textbf{E1 --- Out-of-distribution stress probe.} Probe ReasonMaxxer on far-OOD tasks where base success is near zero, to test whether the ``no new capabilities'' claim survives outside the studied regime. \emph{(Deferred to follow-on work.)} \\
+\textit{Validation: MEASUREMENT (deferred)}
+
+\textbf{E2 --- Non-verifiable task probe.} The reward $r \in \{0,1\}$ assumes a verifier; on open-ended tasks the entropy-gating story may not transfer. \emph{(Deferred to follow-on work.)} \\
+\textit{Validation: MEASUREMENT (deferred)}
+
+\subsection*{Theoretical}
+
+\textbf{T1 --- Active learning as the right framing.} The entropy threshold $\tau$ is exactly the acquisition function of uncertainty-sampling active learning (Lewis \& Gale 1994), lifted to the token level. Reframing ReasonMaxxer as ``active SFT with $H_t$ as the acquisition criterion'' imports label-complexity bounds, query-efficient regret bounds, and known failure modes. \emph{(Deferred --- proof of equivalence not in v1.9.)} \\
+\textit{Validation: PROOF} --- \texttt{proofs/active-learning-equivalence.tex} \emph{(deferred)}
+
+\textbf{T2 --- Low-rank LoRA delta as inference-time activation steering.} The rank-32 LoRA on QKVO --- concentrated in $W_O$ --- is structurally identical to representation-engineering / activation-steering interventions. A formal equivalence (LoRA delta acts at decision points as a steering vector added to the residual stream) would unify two literatures. \\
+\textit{Validation: PROOF} --- \texttt{proofs/lora-equiv-steering.tex}
+
+\section*{Section 5 --- What to Do Next}
+
+\textbf{(a) Most personally promising proposal: M1 (Lipschitz bound on rank displacement).} The cleanest mathematician-flavoured contribution available. Empirical regularity is striking, conjecture is testable, and a one-page perturbation argument plus a softmax-Jacobian bound likely suffices. Most likely to survive peer review as a stand-alone short note because it explains an existing observation rather than proposing a new method.
+
+\textbf{(b) Single experiment to settle the most ambiguous claim: necessity of entropy-gated correction.} The paper shows entropy-gated correction is sufficient but not necessary. Replicate ReasonMaxxer with $D^{(i)}$ replaced by (i) a random same-size subset, (ii) the complement $\{t : H_t < \tau\}$. If pass@1 collapses on both, necessity is established. One training run per ablation on a 1.5B model --- a weekend's compute.
+
+\textbf{(c) Where to take this as a follow-on paper: bridge to mechanistic interpretability via the LoRA-as-steering equivalence (T2).} If the LoRA delta is a steering vector at decision points, then (1) extract it directly from $\pi_{\text{RL}} - \pi_{\text{base}}$ without LoRA scaffolding; (2) test whether it composes linearly across skills; (3) extract via supervised contrast on a small held-out set, fully eliminating RL. The paper writes itself: ``RL for Reasoning is Activation Steering in Disguise --- and Here's the Vector.''
+
+\end{document}
